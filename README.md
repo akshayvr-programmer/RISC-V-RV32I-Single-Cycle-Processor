@@ -181,7 +181,7 @@ Example execution:
 ---
 ## Roadmap
 - [x] **Phase 1: Complete RV32I ISA** — branches, jumps, upper immediates, full I-type ALU ops
-- [ ] **Phase 2:** 5-stage pipeline with hazard detection and forwarding
+- [x] **Phase 2:** 5-stage pipeline with hazard detection and forwarding
 - [ ] **Phase 3:** Self-checking verification suite (riscv-tests or equivalent)
 - [ ] **Phase 4:** CSR/trap support, branch predictor, FPGA synthesis + hardware demo
 - [ ] **Phase 5:** Design-notes documentation comparing architecture to Sargantana (BSC RVA23 core)
