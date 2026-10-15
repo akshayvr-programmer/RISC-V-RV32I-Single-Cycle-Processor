@@ -10,6 +10,9 @@ module cpu_pipeline_loaduse_tb;
         .rst(rst)
     );
 
+    defparam DUT.IM.HEXFILE = "programs/test_loaduse.hex";
+    
+
     always #5 clk = ~clk;
 
     initial begin

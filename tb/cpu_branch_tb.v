@@ -9,6 +9,8 @@ module cpu_branch_tb;
         .clk(clk),
         .rst(rst)
     );
+    defparam DUT.IM.HEXFILE = "programs/test_branch.hex";
+    
 
     always #5 clk = ~clk;
 

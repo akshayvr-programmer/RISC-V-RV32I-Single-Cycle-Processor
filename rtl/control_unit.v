@@ -95,6 +95,13 @@ always @(*) begin
             RegWrite = 1;
             ResultSrc = 2'b11;
         end
+
+        7'b1110011: begin
+
+            RegWrite = 1;
+            ResultSrc = 2'b00; // CSR read data
+        end
+        
         
         default: begin
             // Keep defaults

@@ -53,7 +53,7 @@ wire [1:0] PCSrc;
 wire [31:0] jalr_target;
 // Branch comparator
 wire branch_taken;
-
+wire Jalr;
 assign PCSrc = Jalr ? 2'b10 :
                (Jump | (Branch & branch_taken)) ? 2'b01 :
                2'b00;
@@ -70,7 +70,8 @@ pc PC(
     .clk(clk),
     .rst(rst),
     .next_pc(next_pc),
-    .pc(pc_current)
+    .pc(pc_current),
+    .stall(1'b0)
 
 );
 

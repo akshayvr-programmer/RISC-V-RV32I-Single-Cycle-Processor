@@ -9,6 +9,9 @@ module cpu_pipeline_branch_tb;
         .clk(clk),
         .rst(rst)
     );
+    
+    defparam DUT.IM.HEXFILE = "programs/test_pipeline_branch.hex";
+
 
     always #5 clk = ~clk;
 
@@ -34,3 +37,5 @@ module cpu_pipeline_branch_tb;
     end
 
 endmodule
+
+

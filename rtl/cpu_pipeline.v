@@ -11,6 +11,8 @@ wire [31:0] pc_current;
 wire [31:0] next_pc;
 wire [31:0] pc_plus4_IF;
 wire [31:0] instruction_IF;
+wire [31:0] next_pc_seq;
+
 
 // These come from EX stage (declared later, wired here — Verilog allows this)
 wire [1:0]  PCSrc_EX;
@@ -18,7 +20,7 @@ wire [31:0] branch_target_EX;
 wire [31:0] jalr_target_EX;
 wire        flush_IF_ID;   // control hazard flush, driven from EX stage
 wire        stall_IF_ID;   // load-use hazard stall, driven from hazard unit (ID stage) - unused for now
-
+wire        stall_hazard;
 
 
 pc PC(
@@ -39,7 +41,7 @@ pc_mux PCMUX(
     .pc_plus4(pc_plus4_IF),
     .branch_target(branch_target_EX),
     .jalr_target(jalr_target_EX),
-    .next_pc(next_pc)
+    .next_pc(next_pc_seq)
 );
 
 instruction_memory IM(
@@ -89,6 +91,13 @@ wire [2:0] funct3_ID = instruction_ID[14:12];
 wire [6:0] funct7_ID = instruction_ID[31:25];
 wire is_rtype_ID = (instruction_ID[6:0] == 7'b0110011);
 wire is_auipc_ID = (instruction_ID[6:0] == 7'b0010111);
+wire is_csr_ID = (instruction_ID[6:0] == 7'b1110011) && (instruction_ID[14:12] != 3'b000);
+wire [11:0] csr_addr_ID = instruction_ID[31:20];
+
+wire is_ecall_ID = (instruction_ID == 32'h00000073);
+wire is_mret_ID  = (instruction_ID == 32'h30200073);
+
+
 
 // Looped back from WB stage (declared later)
 wire        RegWrite_WB;
@@ -139,10 +148,15 @@ wire [6:0]  funct7_out;
 wire        is_rtype_out, is_auipc_out;
 wire        Branch_out, Jump_out, Jalr_out, MemRead_out, MemWrite_out, ALUSrc_out, RegWrite_out;
 wire [1:0]  ResultSrc_out, ALUOp_out;
+wire        is_csr_out;
+wire        is_ecall_out, is_mret_out;
+wire [11:0] csr_addr_out;
 
 // Flush ID/EX on a taken branch/jump resolved in EX (declared below) —
 // inserts a bubble so the wrong-path instruction currently in ID doesn't execute.
 wire flush_ID_EX;
+
+
 
 id_ex_reg IDEX(
     .clk(clk),
@@ -172,14 +186,18 @@ id_ex_reg IDEX(
     .rs1_out(rs1_out), .rs2_out(rs2_out), .rd_out(rd_out),
     .funct3_out(funct3_out), .funct7_out(funct7_out),
     .is_rtype_out(is_rtype_out), .is_auipc_out(is_auipc_out),
+    .is_ecall_in(is_ecall_ID), .is_mret_in(is_mret_ID),
+    .is_ecall_out(is_ecall_out), .is_mret_out(is_mret_out),
 
     .Branch_out(Branch_out), .Jump_out(Jump_out), .Jalr_out(Jalr_out),
     .MemRead_out(MemRead_out), .MemWrite_out(MemWrite_out),
     .ALUSrc_out(ALUSrc_out), .RegWrite_out(RegWrite_out),
-    .ResultSrc_out(ResultSrc_out), .ALUOp_out(ALUOp_out)
+    .ResultSrc_out(ResultSrc_out), .ALUOp_out(ALUOp_out),
+    .is_csr_in(is_csr_ID), .csr_addr_in(csr_addr_ID),
+    .is_csr_out(is_csr_out), .csr_addr_out(csr_addr_out)
 );
 
-wire stall_hazard;
+
 
 hazard_unit HZ(
     .MemRead_ID_EX(MemRead_out),
@@ -205,6 +223,42 @@ wire [3:0]  alu_control_EX;
 wire        branch_taken_EX;
 wire [31:0] branch_target_calc_EX;
 wire [31:0] u_result_EX;
+
+wire [1:0] ForwardA, ForwardB;
+wire [31:0] forwarded_a, forwarded_b;
+
+wire [31:0] csr_rdata_EX;
+wire [31:0] csr_wdata_EX;
+wire        csr_we_EX;
+wire [31:0] mtvec_val, mepc_val;
+
+wire        trap_EX     = is_ecall_out;
+wire        mret_EX     = is_mret_out;
+wire        redirect_EX = trap_EX | mret_EX;
+
+csr_file CSR(
+    .clk(clk),
+    .rst(rst),
+    .csr_addr(csr_addr_out),
+    .csr_rdata(csr_rdata_EX),
+    .csr_we(csr_we_EX),
+    .csr_wdata(csr_wdata_EX),
+    .trap_we(trap_EX),
+    .trap_pc(pc_out),
+    .trap_cause(32'd11),
+    .mtvec_out(mtvec_val),
+    .mepc_out(mepc_val)
+);
+
+assign csr_we_EX = is_csr_out;
+
+assign next_pc = redirect_EX ? (mret_EX ? mepc_val : mtvec_val) : next_pc_seq;
+
+assign csr_wdata_EX = (funct3_out[1:0] == 2'b01) ? forwarded_a :                     // CSRRW: overwrite
+                      (funct3_out[1:0] == 2'b10) ? (csr_rdata_EX | forwarded_a) :    // CSRRS: set bits
+                                                   (csr_rdata_EX & ~forwarded_a);    // CSRRC: clear bits
+wire [31:0] ex_result_EX = is_csr_out ? csr_rdata_EX : alu_result_EX;
+
 
 // NOTE: no forwarding yet — read_data1_out/read_data2_out from ID/EX are used
 // directly. This means back-to-back dependent instructions WILL currently
@@ -259,7 +313,8 @@ assign PCSrc_EX = Jalr_out ? 2'b10 :
 // Flush IF/ID and ID/EX whenever EX resolves a taken branch/jump —
 // the instructions fetched right after this one were fetched on the
 // WRONG assumption (sequential PC) and must be squashed.
-assign flush_IF_ID = (PCSrc_EX != 2'b00);
+assign flush_IF_ID = (PCSrc_EX != 2'b00) | redirect_EX;
+
 
 //=========================
 // EX/MEM Pipeline Register
@@ -274,7 +329,7 @@ ex_mem_reg EXMEM(
     .clk(clk),
     .rst(rst),
 
-    .alu_result_in(alu_result_EX),
+    .alu_result_in(ex_result_EX),
     .u_result_in(u_result_EX),
     .write_data_in(forwarded_b),
     .pc_plus4_in(pc_plus4_out),
@@ -321,8 +376,6 @@ data_memory DM(
 wire [31:0] alu_result_WB, u_result_WB, memory_data_WB, pc_plus4_WB;
 wire [1:0] ResultSrc_WB;
 
-wire [1:0] ForwardA, ForwardB;
-wire [31:0] forwarded_a, forwarded_b;
 
 forwarding_unit FWD(
     .rs1_EX(rs1_out),

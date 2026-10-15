@@ -6,7 +6,10 @@ reg [6:0] opcode;
 
 wire Branch;
 wire MemRead;
-wire MemtoReg;
+wire [1:0] ResultSrc;
+wire Jump;
+wire Jalr;
+
 wire [1:0] ALUOp;
 wire MemWrite;
 wire ALUSrc;
@@ -16,7 +19,9 @@ control_unit dut(
     .opcode(opcode),
     .Branch(Branch),
     .MemRead(MemRead),
-    .MemtoReg(MemtoReg),
+    .ResultSrc(ResultSrc),
+    .Jump(Jump),
+    .Jalr(Jalr),
     .ALUOp(ALUOp),
     .MemWrite(MemWrite),
     .ALUSrc(ALUSrc),
@@ -28,10 +33,8 @@ initial begin
     $dumpfile("control_unit.vcd");
     $dumpvars(0, control_unit_tb);
 
-    $monitor("T=%0t opcode=%b | RegWrite=%b ALUSrc=%b MemRead=%b MemWrite=%b MemtoReg=%b Branch=%b ALUOp=%b",
-              $time, opcode, RegWrite, ALUSrc,
-              MemRead, MemWrite, MemtoReg,
-              Branch, ALUOp);
+       $monitor("T=%0t opcode=%b | RegWrite=%b ALUSrc=%b MemRead=%b MemWrite=%b ResultSrc=%b Jump=%b Jalr=%b Branch=%b ALUOp=%b", 
+                  $time, opcode, RegWrite, ALUSrc, MemRead, MemWrite, ResultSrc, Jump, Jalr, Branch, ALUOp);
 
     // R-Type
     opcode = 7'b0110011;

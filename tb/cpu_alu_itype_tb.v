@@ -9,6 +9,7 @@ module cpu_alu_itype_tb;
         .clk(clk),
         .rst(rst)
     );
+    defparam DUT.IM.HEXFILE = "programs/test_alu_itype.hex";
 
     always #5 clk = ~clk;
 

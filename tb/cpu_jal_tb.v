@@ -9,6 +9,8 @@ module cpu_jal_tb;
         .clk(clk),
         .rst(rst)
     );
+    defparam DUT.IM.HEXFILE = "programs/test_jal.hex";
+    
 
     always #5 clk = ~clk;
 
