@@ -203,7 +203,7 @@ All comparisons use `!==`/`===` rather than `!=`/`==` to correctly handle uninit
 - [x] **Phase 1: Complete RV32I ISA** - branches, jumps, upper immediates, full I-type ALU ops
 - [x] **Phase 2: 5-stage pipeline** - hazard detection, forwarding, control-hazard flush handling
 - [x] **Phase 3: Edge-case verification suite** - x0 guard, chained forwarding, sign-extension bounds, shift bounds, branch-on-forward, JALR negative offset
-- [ ] **Phase 4:** CSR/trap support, branch predictor, FPGA synthesis + hardware demo
+- [x] **Phase 4:** CSR/trap support, branch predictor, FPGA synthesis + hardware demo
 - [ ] **Phase 5:** Design-notes documentation comparing architecture to Sargantana (BSC RVA23 core)
 - [ ] **Phase 6:** CLI to load, run, and inspect the processor interactively
 
