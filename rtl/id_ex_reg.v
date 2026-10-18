@@ -17,6 +17,8 @@ module id_ex_reg(
     input wire        is_rtype_in,
     input wire        is_auipc_in,
     input wire is_ecall_in, is_mret_in,
+    input wire is_illegal_in,
+    input wire pred_taken_in, input wire [31:0] pred_target_in,
 
 
     // Control
@@ -42,6 +44,11 @@ module id_ex_reg(
     output reg        is_csr_out,
     output reg [11:0] csr_addr_out,
     output reg is_ecall_out, is_mret_out,
+    output reg is_illegal_out,
+    output reg pred_taken_out, output reg [31:0] pred_target_out,
+
+
+
 
 
     output reg Branch_out, Jump_out, Jalr_out, MemRead_out, MemWrite_out, ALUSrc_out, RegWrite_out,
@@ -57,6 +64,9 @@ always @(posedge clk or posedge rst) begin
         is_rtype_out <= 0; is_auipc_out <= 0;
         is_csr_out <= 0; csr_addr_out <= 0;
         is_ecall_out <= 1'b0; is_mret_out <= 1'b0;
+        is_illegal_out <= 1'b0;
+        pred_taken_out <= 1'b0; pred_target_out <= 32'b0;
+
 
 
 
@@ -71,6 +81,10 @@ always @(posedge clk or posedge rst) begin
         is_rtype_out <= is_rtype_in; is_auipc_out <= is_auipc_in;
         is_csr_out <= is_csr_in; csr_addr_out <= csr_addr_in;
         is_ecall_out <= is_ecall_in; is_mret_out <= is_mret_in;
+        is_illegal_out <= is_illegal_in;
+
+        pred_taken_out <= pred_taken_in;
+        pred_target_out <= pred_target_in;
         
 
 

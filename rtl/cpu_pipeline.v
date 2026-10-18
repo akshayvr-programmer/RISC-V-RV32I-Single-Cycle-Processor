@@ -1,6 +1,8 @@
-module cpu_pipeline(
+module cpu_pipeline #(parameter  USE_BP = 1)(
     input wire clk,
-    input wire rst
+    input wire rst,
+    output wire [15:0] debug_out
+
 );
 
 //=========================
@@ -17,7 +19,11 @@ wire [31:0] next_pc_seq;
 // These come from EX stage (declared later, wired here — Verilog allows this)
 wire [1:0]  PCSrc_EX;
 wire [31:0] branch_target_EX;
+wire [31:0] recover_pc_EX;
 wire [31:0] jalr_target_EX;
+wire mispredict_EX;
+
+
 wire        flush_IF_ID;   // control hazard flush, driven from EX stage
 wire        stall_IF_ID;   // load-use hazard stall, driven from hazard unit (ID stage) - unused for now
 wire        stall_hazard;
@@ -56,12 +62,21 @@ instruction_memory IM(
 wire [31:0] instruction_ID;
 wire [31:0] pc_ID;
 wire [31:0] pc_plus4_ID;
+wire        pred_taken_ID;
+wire [31:0] pred_target_ID;
+wire        pred_taken_IF;
+wire pred_taken_raw;
+assign pred_taken_IF = USE_BP ? pred_taken_raw : 1'b0;
+
+wire [31:0] pred_target_IF;
 
 if_id_reg IFID(
     .clk(clk),
     .rst(rst),
     .stall(stall_IF_ID),
     .flush(flush_IF_ID),
+    .pred_taken_in(pred_taken_IF), .pred_target_in(pred_target_IF), .pred_taken_out(pred_taken_ID), .pred_target_out(pred_target_ID),
+
 
     .instruction_in(instruction_IF),
     .pc_in(pc_current),
@@ -71,6 +86,11 @@ if_id_reg IFID(
     .pc_out(pc_ID),
     .pc_plus4_out(pc_plus4_ID)
 );
+
+
+
+
+
 
 //=========================
 // ID Stage
@@ -95,6 +115,14 @@ wire is_csr_ID = (instruction_ID[6:0] == 7'b1110011) && (instruction_ID[14:12] !
 wire [11:0] csr_addr_ID = instruction_ID[31:20];
 
 wire is_ecall_ID = (instruction_ID == 32'h00000073);
+wire [6:0] opcode_ID = instruction_ID[6:0];
+wire is_legal_ID = (opcode_ID == 7'b0110011) | (opcode_ID == 7'b0010011) |
+                   (opcode_ID == 7'b0000011) | (opcode_ID == 7'b0100011) |
+                   (opcode_ID == 7'b1100011) | (opcode_ID == 7'b1101111) |
+                   (opcode_ID == 7'b1100111) | (opcode_ID == 7'b0110111) |
+                   (opcode_ID == 7'b0010111) | (opcode_ID == 7'b1110011) |
+                   (opcode_ID == 7'b0001111);
+wire is_illegal_ID = ~is_legal_ID & (instruction_ID != 32'b0);
 wire is_mret_ID  = (instruction_ID == 32'h30200073);
 
 
@@ -103,6 +131,8 @@ wire is_mret_ID  = (instruction_ID == 32'h30200073);
 wire        RegWrite_WB;
 wire [4:0]  rd_WB;
 wire [31:0] write_back_data_WB;
+assign debug_out = write_back_data_WB[31:16] ^ write_back_data_WB[15:0];
+
 
 register_file RF(
     .clk(clk),
@@ -137,6 +167,7 @@ control_unit CTRL(
     .RegWrite(RegWrite_ID)
 );
 
+
 //=========================
 // ID/EX Pipeline Register
 //=========================
@@ -150,18 +181,25 @@ wire        Branch_out, Jump_out, Jalr_out, MemRead_out, MemWrite_out, ALUSrc_ou
 wire [1:0]  ResultSrc_out, ALUOp_out;
 wire        is_csr_out;
 wire        is_ecall_out, is_mret_out;
+wire is_illegal_out;
+
 wire [11:0] csr_addr_out;
 
 // Flush ID/EX on a taken branch/jump resolved in EX (declared below) —
 // inserts a bubble so the wrong-path instruction currently in ID doesn't execute.
 wire flush_ID_EX;
-
+wire        pred_taken_EX;
+wire [31:0] pred_target_EX;
 
 
 id_ex_reg IDEX(
     .clk(clk),
     .rst(rst),
     .flush(flush_ID_EX),
+    .is_illegal_in(is_illegal_ID), .is_illegal_out(is_illegal_out),
+    .pred_taken_in(pred_taken_ID), .pred_target_in(pred_target_ID), .pred_taken_out(pred_taken_EX), .pred_target_out(pred_target_EX),
+
+
 
     .pc_in(pc_ID),
     .pc_plus4_in(pc_plus4_ID),
@@ -232,7 +270,7 @@ wire [31:0] csr_wdata_EX;
 wire        csr_we_EX;
 wire [31:0] mtvec_val, mepc_val;
 
-wire        trap_EX     = is_ecall_out;
+wire        trap_EX     = is_ecall_out | is_illegal_out;
 wire        mret_EX     = is_mret_out;
 wire        redirect_EX = trap_EX | mret_EX;
 
@@ -245,14 +283,19 @@ csr_file CSR(
     .csr_wdata(csr_wdata_EX),
     .trap_we(trap_EX),
     .trap_pc(pc_out),
-    .trap_cause(32'd11),
+    .trap_cause(is_illegal_out ? 32'd2 : 32'd11),
     .mtvec_out(mtvec_val),
     .mepc_out(mepc_val)
 );
 
 assign csr_we_EX = is_csr_out;
 
-assign next_pc = redirect_EX ? (mret_EX ? mepc_val : mtvec_val) : next_pc_seq;
+assign next_pc = redirect_EX ? (mret_EX ? mepc_val : mtvec_val) :
+                 (PCSrc_EX != 2'b00) ? next_pc_seq :
+                 mispredict_EX ? recover_pc_EX :
+                 pred_taken_IF ? pred_target_IF :
+                 next_pc_seq;
+
 
 assign csr_wdata_EX = (funct3_out[1:0] == 2'b01) ? forwarded_a :                     // CSRRW: overwrite
                       (funct3_out[1:0] == 2'b10) ? (csr_rdata_EX | forwarded_a) :    // CSRRS: set bits
@@ -296,6 +339,19 @@ branch_comp BCOMP(
     .branch_taken(branch_taken_EX)
 );
 
+branch_predictor BP(
+    .clk(clk),
+    .rst(rst),
+    .pc_IF(pc_current),
+    .predict_taken(pred_taken_raw),
+    .predict_target(pred_target_IF),
+    .update_en((Branch_out | Jump_out) & ~Jalr_out),
+    .update_pc(pc_out),
+    .update_taken(Jump_out | (Branch_out & branch_taken_EX)),
+    .update_target(branch_target_EX)
+);
+
+
 branch_adder BA(
     .pc(pc_out),
     .immediate(immediate_out),
@@ -306,14 +362,21 @@ assign branch_target_EX = branch_target_calc_EX;
 assign jalr_target_EX   = {alu_result_EX[31:1], 1'b0};
 assign u_result_EX      = is_auipc_out ? (pc_out + immediate_out) : immediate_out;
 
-assign PCSrc_EX = Jalr_out ? 2'b10 :
-                  (Jump_out | (Branch_out & branch_taken_EX)) ? 2'b01 :
-                  2'b00;
 
-// Flush IF/ID and ID/EX whenever EX resolves a taken branch/jump —
-// the instructions fetched right after this one were fetched on the
-// WRONG assumption (sequential PC) and must be squashed.
-assign flush_IF_ID = (PCSrc_EX != 2'b00) | redirect_EX;
+wire        is_ctrl_EX       = (Branch_out | Jump_out) & ~Jalr_out;
+wire        actual_taken_EX  = Jump_out | (Branch_out & branch_taken_EX);
+wire [31:0] actual_target_EX = branch_target_EX;
+assign recover_pc_EX = actual_taken_EX ? actual_target_EX : pc_plus4_out;
+wire guess_taken_EX = pred_taken_EX;
+assign mispredict_EX = is_ctrl_EX & ( (actual_taken_EX != guess_taken_EX) |
+                     (actual_taken_EX & guess_taken_EX & (pred_target_EX != actual_target_EX)) );
+
+assign recover_pc_EX = actual_taken_EX ? actual_target_EX : pc_plus4_out;
+
+// CHANGED: branches no longer use the old mux, only JALR does
+assign PCSrc_EX = Jalr_out ? 2'b10 : 2'b00;
+
+assign flush_IF_ID = (PCSrc_EX != 2'b00) | mispredict_EX | redirect_EX;
 
 
 //=========================
