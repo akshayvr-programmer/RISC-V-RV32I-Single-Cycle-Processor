@@ -8,7 +8,7 @@ The original single-cycle core (`cpu.v`) is preserved unchanged as a verified re
 ---
 ## Highlights
 - **12.4% fewer cycles** with the branch predictor on a branch-heavy benchmark (755 vs 661 cycles, identical results)
-- **Meets 100 MHz timing** on an Artix-7 `xc7a35tcpg236-1` (+0.267 ns setup slack), using about 1,300 LUTs and 1,400 flip-flops, no block RAM or DSPs
+- **Meets 100 MHz timing** on an Artix-7 `xc7a35tcpg236-1` with the Basys 3 pin map (+0.132 ns setup slack), using about 1,300 LUTs and 1,400 flip-flops, no block RAM or DSPs. A bitstream was generated but not flashed to a board
 - Synchronous traps (ECALL, illegal instruction) with MRET, resolved in EX with the same flush mechanism as branches
 - Full self-checking regression, run with one command (`.\run_all.ps1`)
 ---
@@ -107,14 +107,15 @@ Vivado 2026.1, part `xc7a35tcpg236-1` (Artix-7, speed grade -1), 100 MHz clock c
  
 | Metric | Result |
 |---|---|
-| Slice LUTs | 1,335 of 20,800 (6.4%) |
+| Slice LUTs | 1,338 of 20,800 (6.4%) |
 | Slice registers | 1,392 of 41,600 (3.4%) |
 | Block RAM / DSP | 0 / 0 |
-| Worst setup slack | +0.267 ns (all constraints met) |
-| Worst hold slack | +0.075 ns |
-| Implied max frequency | about 102.7 MHz |
+| Worst setup slack | +0.132 ns (all constraints met) |
+| Worst hold slack | +0.099 ns |
+| Implied max frequency | about 101.3 MHz |
+
  
-The critical path runs from the forwarding mux through the branch comparator to the mispredict/flush decision, and about 72% of it is routing delay (the flush signal fans out to roughly 115 flip-flops). **The design was synthesized and timing-closed but not flashed to a board.** The figures are for one benchmark program with a fixed instruction ROM, so they are a lower bound. See `docs/PHASE4_FPGA_NOTES.md` for the full report and caveats; raw reports are in `docs/fpga/`.
+The critical path runs from the forwarding mux through the branch comparator to the mispredict/flush decision, and about 75% of it is routing delay (the flush signal fans out to well over 100 flip-flops). With default implementation settings the pinned design missed 100 MHz by 7 ps; the `Performance_ExplorePostRoutePhysOpt` strategy closed it. **A bitstream was generated, but the design was never flashed to a board.** The figures are for one benchmark program with a fixed instruction ROM, so they are a lower bound. See `docs/PHASE4_FPGA_NOTES.md` for the full report and caveats; raw reports are in `docs/fpga/`.
  
 ---
 ## Directory Structure
@@ -195,7 +196,8 @@ RISC-V-RV32I/
 |
 ├── fpga/
 │   ├── fpga_top.v            (synthesis wrapper)
-│   └── cpu_timing.xdc        (100 MHz clock constraint)
+│   │   
+    └── cpu_timing.xdc        (100 MHz clock constraint and Basys 3 pin map)
 |
 ├── docs/
 │   ├── PHASE1_NOTES.md
@@ -233,6 +235,9 @@ iverilog "-Pbp_bench.USE_BP=0" -o run.out $rtl tb\bp_bench.v ; vvp run.out
 ```
  
 ---
+
+To rebuild the FPGA design, create a Vivado project for `xc7a35tcpg236-1` with `rtl/*.v`, `fpga/fpga_top.v` and `fpga/cpu_timing.xdc`, set `fpga_top` as top, and point the instruction memory at the benchmark with the Tcl console (use your own path):
+
 ## Verification
  
 Three-tier verification approach:
@@ -292,7 +297,7 @@ All comparisons use `!==`/`===` rather than `!=`/`==` to correctly handle uninit
 - Not verified against the official `riscv-tests` compliance suite (would require a full RISC-V GCC toolchain) - verified instead via a custom-built edge-case suite targeting known-risky boundary and combination cases. See `docs/PHASE3_NOTES.md` for scope and rationale.
 - No automated assembler - test programs are hand-encoded to hex. This has already caused one transcription bug (a misplaced register field in a JALR test), caught via the same tracing methodology used for RTL bugs.
 - Traps cover ECALL and illegal instructions only. No interrupts, `mtval`, EBREAK, misaligned-access traps, privilege modes other than Machine, or CSR immediate forms.
-- An all-zero instruction word never traps (pipeline bubbles are all zeros, so the illegal-instruction check must ignore them). A genuine `0x00000000` in memory runs as a no-op.
+- The FPGA build was synthesized, timing-closed and a bitstream generated, but it was **not flashed to a board** (no hardware test). Utilization and timing are for one benchmark program with a fixed instruction ROM, which lets synthesis remove logic the program never uses, so they are a lower bound. Pins are mapped but I/O delays are not constrained, so only register-to-register timing was checked.
 - The predictor is small (16 entries, direct-mapped) and does not predict JALR, so function returns still pay the full 2-cycle flush.
 - The FPGA build was synthesized and timing-closed but **not flashed to a board** (no bitstream, no hardware test). Utilization and timing are for one benchmark program with a fixed instruction ROM, which lets synthesis remove logic the program never uses, so they are a lower bound. Only register-to-register timing was checked.
 ---
