@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this processor design, please cite it as below."
+title: "RISC-V RV32I 5-Stage Pipelined Processor with CSR Traps and Branch Prediction"
+type: software
+version: 1.0.0
+date-released: 2026-10-19
+license: MIT
+repository-code: "https://github.com/akshayvr-programmer/RISC-V-RV32I-Single-Cycle-Processor"
+authors:
+  - given-names: "Akshay"
+    family-names: "V R"
+    affiliation: "Netaji Subhas University of Technology (NSUT), Delhi"
+keywords:
+  - RISC-V
+  - RV32I
+  - Verilog
+  - pipelined processor
+  - branch prediction
+  - FPGA
+abstract: >-
+  A 5-stage pipelined RV32I RISC-V processor in Verilog with hazard detection,
+  forwarding, CSR and trap support (ECALL, MRET, illegal instruction), a
+  dynamic branch predictor, and a self-checking regression suite. Synthesized
+  and timing-closed at 100 MHz for an Artix-7 (not flashed to a board).
