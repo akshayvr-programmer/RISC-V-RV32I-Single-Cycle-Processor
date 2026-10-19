@@ -17,6 +17,11 @@ keywords:
   - pipelined processor
   - branch prediction
   - FPGA
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23465753
+    description: Concept DOI, always resolves to the latest version
+    
 abstract: >-
   A 5-stage pipelined RV32I RISC-V processor in Verilog with hazard detection,
   forwarding, CSR and trap support (ECALL, MRET, illegal instruction), a

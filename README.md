@@ -1,4 +1,6 @@
 # RISC-V RV32I Processor in Verilog
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23465753.svg)](https://doi.org/10.5281/zenodo.23465753)
+
 A **5-stage pipelined RV32I processor** implemented from scratch in **Verilog HDL**, built incrementally from a verified single-cycle reference core. Implements the complete RV32I base integer instruction set with hazard detection, forwarding, and control-hazard flushing, plus **CSR and trap support** (ECALL, MRET, illegal-instruction traps), a **dynamic branch predictor**, and a **synthesized and timing-closed FPGA build** for the Artix-7 (Basys 3 chip, not yet flashed to a board).
  
 The original single-cycle core (`cpu.v`) is preserved unchanged as a verified reference implementation alongside the pipelined core (`cpu_pipeline.v`).
